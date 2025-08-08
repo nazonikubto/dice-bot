@@ -21,7 +21,7 @@ async def on_ready():
 
 # 1d100 → [50]
 # 2d6+1d4+3 → [1,5] + [2] + 3 = 11
-@bot.command(aliases=["roll", "うお"])
+@bot.command(aliases=["roll"])
 async def dice(ctx, *, expression: str):
     expression = expression.replace("＋", "+").replace("−", "-")  # 全角対応
     try:
@@ -52,8 +52,8 @@ async def dice(ctx, *, expression: str):
     except Exception as e:
         await ctx.send("⚠️ コマンドが正しくありません。例: `!1d100+1d10+5`")
 
-# !cd or !うお で判定（クリティカル/ファンブル）
-@bot.command(aliases=["うお"])
+# !cd で判定（クリティカル/ファンブル）
+@bot.command()
 async def cd(ctx, n: int = None):
     result = random.randint(1, 100)
 
@@ -84,7 +84,29 @@ async def choice(ctx, *options: str):
     embed = Embed(title="🎯 選択", description=f"選ばれたのは **{selected}**", color=0xff99cc)
     await ctx.send(embed=embed)
 
+# "うお" だけで反応させる（通常メッセージ監視）
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    # うお → ダイス判定
+    if message.content.strip() == "うお":
+        result = random.randint(1, 100)
+        if result <= 5:
+            outcome = "🎯 **クリティカル（決定的成功）！**"
+        elif result >= 96:
+            outcome = "💥 **ファンブル（致命的失敗）！**"
+        else:
+            outcome = "成功 or 失敗（閾値未指定）"
+
+        embed = Embed(title="🎲 1d100判定", description=f"出目: **{result}**", color=0x66ccff)
+        embed.add_field(name="結果", value=outcome, inline=False)
+        await message.channel.send(embed=embed)
+
+    # 他のコマンドも通す
+    await bot.process_commands(message)
+
 # Bot起動（Render上では使わない）
 if __name__ == "__main__":
     bot.run(TOKEN)
-
