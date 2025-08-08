@@ -1,27 +1,16 @@
-# app.py
+# bot.py
 
 import os
 import random
 import discord
 from discord.ext import commands
-from flask import Flask
-from threading import Thread
 
-# Flaskアプリ部分
-app = Flask('')
-
-@app.route('/')
-def home():
-    return "I'm alive!"
-
-def run_flask():
-    app.run(host='0.0.0.0', port=8080)
-
-# Discord Bot 部分
+# トークン取得
 TOKEN = os.environ.get('DISCORD_TOKEN')
 if not TOKEN:
-    raise ValueError("DISCORD_TOKENが環境変数にありません")
+    raise ValueError("DISCORD_TOKEN が環境変数にありません")
 
+# Botの設定
 intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
@@ -74,15 +63,6 @@ async def choice(ctx, *options: str):
     selected = random.choice(options)
     await ctx.send(f"選ばれたのは: {selected}")
 
-# Discord Bot を別スレッドで起動する関数
-def run_bot():
+# Render / gunicorn から呼び出されるための関数化
+def start_bot():
     bot.run(TOKEN)
-
-# Flaskアプリは gunicorn で起動されるので、  
-# Discord Bot はこのスクリプト起動時に別スレッドで立ち上げる
-
-if __name__ == "__main__":
-    Thread(target=run_bot).start()
-    run_flask()
-
-
