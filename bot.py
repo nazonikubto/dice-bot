@@ -1,29 +1,38 @@
 import os
 import re
 import random
+import threading
 import discord
 from discord.ext import commands
-from discord import app_commands, Embed
+from flask import Flask
+from discord import Embed
 
-# トークン取得
+# ====== Flask (Keep Alive) ======
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+# ====== Discord Bot ======
 TOKEN = os.getenv("DISCORD_TOKEN")
 if not TOKEN:
     raise ValueError("DISCORD_TOKEN が環境変数にありません")
 
-# Bot初期化（prefix付きコマンドは"!"限定）
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+
+# prefixなしでも「うお」で反応
+bot = commands.Bot(command_prefix="", intents=intents)
 
 @bot.event
 async def on_ready():
     print(f"{bot.user} が起動しました！")
 
-# 1d100 → [50]
-# 2d6+1d4+3 → [1,5] + [2] + 3 = 11
-@bot.command(aliases=["roll"])
-async def dice(ctx, *, expression: str):
-    expression = expression.replace("＋", "+").replace("−", "-")  # 全角対応
+# 🎲 ダイスコマンド
+@bot.command(name="うお")
+async def dice(ctx, *, expression: str = "1d100"):
+    expression = expression.replace("＋", "+").replace("−", "-")
     try:
         tokens = re.findall(r'(\d*d\d+|\d+|[+\-])', expression)
         total = 0
@@ -49,24 +58,23 @@ async def dice(ctx, *, expression: str):
         embed = Embed(title="🎲 ダイス結果", description="\n".join(detail), color=0x00ffcc)
         embed.add_field(name="合計", value=str(total), inline=False)
         await ctx.send(embed=embed)
-    except Exception as e:
-        await ctx.send("⚠️ コマンドが正しくありません。例: `!1d100+1d10+5`")
+    except Exception:
+        await ctx.send("⚠️ 形式が正しくありません。例: `うお 1d100+1d10+5`")
 
-# !cd で判定（クリティカル/ファンブル）
-@bot.command()
+# 判定コマンド（クリティカル・ファンブル）
+@bot.command(name="判定")
 async def cd(ctx, n: int = None):
     result = random.randint(1, 100)
-
     if n is None:
         if result <= 5:
-            outcome = "🎯 **クリティカル（決定的成功）！**"
+            outcome = "🎯 **クリティカル！**"
         elif result >= 96:
-            outcome = "💥 **ファンブル（致命的失敗）！**"
+            outcome = "💥 **ファンブル！**"
         else:
-            outcome = "成功 or 失敗（閾値未指定）"
+            outcome = "成功 or 失敗（閾値なし）"
     else:
         if not 1 <= n <= 100:
-            await ctx.send("1〜100の範囲で指定してください")
+            await ctx.send("1〜100で指定してください")
             return
         outcome = f"🎯 成功！（{result} ≤ {n}）" if result <= n else f"💥 失敗…（{result} > {n}）"
 
@@ -74,39 +82,24 @@ async def cd(ctx, n: int = None):
     embed.add_field(name="結果", value=outcome, inline=False)
     await ctx.send(embed=embed)
 
-# !choice 赤 青 緑 / 全角も可
+# 選択コマンド
 @bot.command()
 async def choice(ctx, *options: str):
     if len(options) < 2:
-        await ctx.send("⚠️ 選択肢は2つ以上必要です。例: `!choice 赤 青`")
+        await ctx.send("⚠️ 選択肢は2つ以上必要です。例: `choice 赤 青`")
         return
     selected = random.choice(options)
     embed = Embed(title="🎯 選択", description=f"選ばれたのは **{selected}**", color=0xff99cc)
     await ctx.send(embed=embed)
 
-# "うお" だけで反応させる（通常メッセージ監視）
-@bot.event
-async def on_message(message):
-    if message.author.bot:
-        return
+# ====== 起動 ======
+def run_flask():
+    app.run(host='0.0.0.0', port=8080)
 
-    # うお → ダイス判定
-    if message.content.strip() == "うお":
-        result = random.randint(1, 100)
-        if result <= 5:
-            outcome = "🎯 **クリティカル（決定的成功）！**"
-        elif result >= 96:
-            outcome = "💥 **ファンブル（致命的失敗）！**"
-        else:
-            outcome = "成功 or 失敗（閾値未指定）"
-
-        embed = Embed(title="🎲 1d100判定", description=f"出目: **{result}**", color=0x66ccff)
-        embed.add_field(name="結果", value=outcome, inline=False)
-        await message.channel.send(embed=embed)
-
-    # 他のコマンドも通す
-    await bot.process_commands(message)
-
-# Bot起動（Render上では使わない）
-if __name__ == "__main__":
+def run_discord():
     bot.run(TOKEN)
+
+if __name__ == "__main__":
+    threading.Thread(target=run_flask).start()
+    run_discord()
+
